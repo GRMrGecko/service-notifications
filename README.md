@@ -110,6 +110,7 @@ Get Slack API token by creating an app at https://api.slack.com/apps then go to 
 
 Get Planning Center API secrets at https://api.planningcenteronline.com/oauth/applications by creating a personal access token.
 
+You can get a slack user ID by viewing the profile and under the 3 dot menu choose Copy member ID.
 
 ```yaml
 ---
@@ -122,6 +123,9 @@ planning_center:
 
 slack:
     api_token: SLACK_API_TOKEN
-    admin_id: SLACK_UID
+    create_from_weekday: 3
+    default_conversation: SLACK_UID
+	sticky_users:
+        - SLACK_UID
 
 ```

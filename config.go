@@ -35,9 +35,11 @@ type PlanningCenterConfig struct {
 
 // Configurations relating to Slack API/channel creation.
 type SlackConfig struct {
+	CreateFromWeekday   int           `fig:"create_from_weekday"`   // Create ahead from this weekday. -1 value is default and will instead create from the current time of operation.
 	CreateChannelsAhead time.Duration `fig:"create_channels_ahead"` // Amount of time of future services to create channels head for. Defaults to 8 days head.
 	APIToken            string        `fig:"api_token"`
-	AdminID             string        `fig:"admin_id"` // Slack user that administers this app.
+	StickyUsers         []string      `fig:"sticky_users"`         // Users to add to every channel.
+	DefaultConversation string        `fig:"default_conversation"` // Slack user that administers this app.
 }
 
 // Configuration Structure.
@@ -86,6 +88,7 @@ func (a *App) ReadConfig() {
 			Connection: "service-notifications.db",
 		},
 		Slack: SlackConfig{
+			CreateFromWeekday:   -1,
 			CreateChannelsAhead: time.Hour * 24 * 8,
 		},
 	}

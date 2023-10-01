@@ -96,7 +96,7 @@ func (s *HTTPServer) RegisterAPIRoutes(r *mux.Router) {
 
 		// Get current time and default conversation.
 		now := time.Now().UTC()
-		conversation := app.config.Slack.AdminID
+		conversation := app.config.Slack.DefaultConversation
 
 		// Find plan times that are occuring right now.
 		var planTime PlanTimes

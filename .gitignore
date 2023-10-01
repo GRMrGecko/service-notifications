@@ -1,3 +1,4 @@
 config.yaml
 service-notifications
 service-notifications.db
+sync.sh

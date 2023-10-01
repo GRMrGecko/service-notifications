@@ -13,6 +13,19 @@ import (
 
 // Update planning center database tables with data from PC API.
 func UpdatePCData() {
+	// We don't need to update the archive if we already have data from the past,
+	// as such we get the current time and see if we already have an entry in the future.
+	// Its possible that some people only schedule services once a week, so we check with
+	// the current date subtracted by 14 days.
+	var updateFrom time.Time
+	now := time.Now().UTC()
+	var futurePlan Plans
+	app.db.Where("first_time_at >= ?", now.Add(time.Hour*24*14*-1)).Order("first_time_at ASC").First(&futurePlan)
+	if futurePlan.ID != 0 {
+		// If a future plan exists, we update from past 30 days.
+		updateFrom = now.Add(time.Hour * 24 * 30 * -1)
+	}
+
 	// Get all people.
 	allPeople, err := PCGetAll("/services/v2/people")
 	if err != nil {
@@ -117,6 +130,13 @@ func UpdatePCData() {
 			p.LastTimeAt = attributes.GetDate("last_time_at")
 			p.MultiDay = attributes.GetBool("multi_day")
 			p.Dates = attributes.GetString("dates")
+
+			// If either updated at or first time at for the plan is before the update from date,
+			// we can process the update of data. Otherwise, we ignore this service as we do not care
+			// about updating historic data. Updating historic data causes more API traffic than needed.
+			if p.UpdatedAt.Before(updateFrom) && p.FirstTimeAt.Before(updateFrom) {
+				continue
+			}
 
 			// If plan wasn't already created, create it.
 			if p.ID == 0 {
@@ -291,13 +311,41 @@ func UpdateSlackData() {
 	}
 }
 
+/*
+
+Delay on channel descript/topic may not be long enough.
+
+*/
+
 // Create slack channels for upcoming services.
 func CreateSlackChannels() {
-	// For now, we're using the start time of now. I want to update this later to allow
-	// setting a day of the week for slack channels to be created on.
-	// Doing a day of the week will allow for channels to be created ahead of time, then
-	// if people are added to the plan later on, they can be added at the next cron run.
-	startDate := time.Now().UTC()
+	// Start at now.
+	now := time.Now().UTC()
+	startDate := now
+	// If create from weekday is a valid weekday, attempt to turn back the clock to the
+	// most recently past weekday. Use that day as the stating point so we do not
+	// create channels in the future past the date we expect to have channels.
+	// This is useful if you want to run the cron every day to keep channel title
+	// and members up to date, but only want so many channels ahead of a certain weekday.
+	if app.config.Slack.CreateFromWeekday != -1 && app.config.Slack.CreateFromWeekday <= 6 {
+		// Get the current weekday and set the days to subtract to 0.
+		thisWeekday := int(now.Weekday())
+		var daysSub int = 0
+
+		// If this weekday is the day we intend to create from, or if the weekday is
+		// after. We want to just subtract this weekday from create form weekday which
+		// should get us back to the most recent weekday.
+		if thisWeekday >= app.config.Slack.CreateFromWeekday {
+			daysSub = app.config.Slack.CreateFromWeekday - thisWeekday
+		} else {
+			// Otherwise, we have started a new week from that weekday and we need to
+			// add 7 days to the current weekday in our subtraction. This will bring us
+			// not to the next weekday, but the past weekday.
+			daysSub = app.config.Slack.CreateFromWeekday - (thisWeekday + 7)
+		}
+		// Subtract the number of days calculated to bring us to the weekday to create form.
+		startDate = now.Add(time.Hour * 24 * time.Duration(daysSub))
+	}
 	// Last date is start date plus duration of create channels ahead.
 	lastDate := startDate.Add(app.config.Slack.CreateChannelsAhead)
 
@@ -391,7 +439,7 @@ func CreateSlackChannels() {
 			if topic != "" {
 				// Sleep before, as it takes time for Slack APIs
 				// to recongize the channel was created.
-				time.Sleep(10 * time.Second)
+				time.Sleep(120 * time.Second)
 				_, err = app.slack.SetTopicOfConversation(channel.ID, topic)
 				if err != nil {
 					log.Println("Failed to set topic:", err)
@@ -420,6 +468,31 @@ func CreateSlackChannels() {
 
 		// Keep a list of users we need to invite as they are new.
 		var usersToInvite []string
+
+		// For each sticky user, invite them.
+		for _, stickyUser := range app.config.Slack.StickyUsers {
+			// Check if they were already invited.
+			alreadyInvited := false
+			for _, uid := range invited {
+				if uid == stickyUser {
+					alreadyInvited = true
+					break
+				}
+			}
+
+			// Make sure they were not already added to the list of users.
+			for _, uid := range usersToInvite {
+				if uid == stickyUser {
+					alreadyInvited = true
+					break
+				}
+			}
+
+			// If not already invited, add to the list of users to invite.
+			if !alreadyInvited {
+				usersToInvite = append(usersToInvite, stickyUser)
+			}
+		}
 
 		// For each person on the plan, see if we need to invite them.
 		for _, personOnPlan := range peopleOnPlan {
