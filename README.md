@@ -125,7 +125,7 @@ slack:
     api_token: SLACK_API_TOKEN
     create_from_weekday: 3
     default_conversation: SLACK_UID
-	sticky_users:
+    sticky_users:
         - SLACK_UID
 
 ```
