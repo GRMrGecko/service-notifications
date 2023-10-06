@@ -437,16 +437,21 @@ func CreateSlackChannels() {
 
 			// If topic is defined, set the topic and purpose.
 			if topic != "" {
-				// Sleep before, as it takes time for Slack APIs
-				// to recongize the channel was created.
-				time.Sleep(120 * time.Second)
-				_, err = app.slack.SetTopicOfConversation(channel.ID, topic)
+				// Keep count of failures so we can try again.
+				failed := 0
+				_, err = app.slack.SetTopicOfConversation(schan.ID, topic)
 				if err != nil {
+					failed++
 					log.Println("Failed to set topic:", err)
 				}
-				_, err = app.slack.SetPurposeOfConversation(channel.ID, topic)
+				_, err = app.slack.SetPurposeOfConversation(schan.ID, topic)
 				if err != nil {
+					failed++
 					log.Println("Failed to set purpose:", err)
+				}
+				// If it failed, make topic empty so we can try again next run.
+				if failed != 0 {
+					topic = ""
 				}
 			}
 
